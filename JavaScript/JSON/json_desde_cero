@@ -1,0 +1,21 @@
+JSON dese cero!
+
+JSON es un formota de dotos en JavaSCript 
+
+STRINGS "manzana"   "daniel"   "Diego"
+
+NUMBERS 3      9.5          -5
+
+BOOLEAN  true "1"          false "0" 
+
+NULL      null 
+
+datos compuestos
+VALUES  "daniel" + "casco"         5+10
+
+
+objetos
+PBJETS    onj1 = nombre, apellido, edad, sexo
+
+ARREGLOS
+ARRAYS   array{1,2,3}  names{dani,mari,lola}
