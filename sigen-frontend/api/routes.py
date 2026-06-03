@@ -1,0 +1,1 @@
+# Endpoints adicionales (integración con InfluxDB)

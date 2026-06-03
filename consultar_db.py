@@ -5,6 +5,15 @@ Consultas a la base de datos SQLite de Sigegen
 import sqlite3
 import pandas as pd
 from tabulate import tabulate
+import sys
+
+# Forzar codificación UTF-8 para stdout en Windows
+if hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
 
 def consultar():
     conn = sqlite3.connect('sigegen.db')

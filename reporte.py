@@ -4,6 +4,15 @@ Generador de reporte HTML con resultados de Sigegen
 
 import sqlite3
 import datetime
+import sys
+
+# Forzar codificación UTF-8 para stdout en Windows
+if hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
 
 def generar_reporte():
     conn = sqlite3.connect('sigegen.db')

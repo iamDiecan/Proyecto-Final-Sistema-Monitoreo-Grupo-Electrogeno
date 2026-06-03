@@ -8,6 +8,15 @@ import time
 import random
 import paho.mqtt.client as mqtt
 from datetime import datetime
+import sys
+
+# Forzar codificación UTF-8 para stdout en Windows
+if hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
 
 
 # CONFIGURACIÓN DE NODOS POR ZONA
@@ -245,7 +254,7 @@ class SimuladorGeneradores:
             time.sleep(0.05)
         
         print("\n" + "="*80)
-        print(f"✅ Publicados {len(NODOS)} mensajes")
+        print(f" Publicados {len(NODOS)} mensajes")
         print("="*80)
     
     def _estimar_nivel(self, lectura):

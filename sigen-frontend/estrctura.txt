@@ -1,0 +1,28 @@
+sigen-frontend/
+├── assets/                      # Archivos estáticos (imágenes, logos, favicon)
+│   └── logo_sigen.png
+├── rxconfig.py                  # Configuración principal de Reflex
+└── sigen/                       # App principal
+    ├── __init__.py
+    ├── sigen.py                 # Archivo principal con la app
+    ├── styles.py                # Estilos globales (colores, temas, tipografía)
+    ├── components/              # Componentes reutilizables
+    │   ├── __init__.py
+    │   ├── sidebar.py           # Barra lateral de navegación
+    │   ├── cards.py             # Tarjetas de generadores
+    │   ├── charts.py            # Componentes de gráficos
+    │   └── alerts.py            # Componentes de alertas
+    ├── pages/                   # Páginas de la aplicación
+    │   ├── __init__.py
+    │   ├── dashboard.py         # Página principal
+    │   ├── generador_detail.py  # Detalle de un generador
+    │   ├── alertas.py           # Panel de alertas
+    │   └── configuracion.py     # Configuración de umbrales
+    ├── templates/               # Templates base
+    │   ├── __init__.py
+    │   └── template.py          # Template con sidebar y top bar
+    └── state/                   # Estados de la aplicación
+        ├── __init__.py
+        ├── generador_state.py   # Estado de generadores
+        ├── telemetria_state.py  # Estado de telemetría
+        └── alerta_state.py      # Estado de alertas
