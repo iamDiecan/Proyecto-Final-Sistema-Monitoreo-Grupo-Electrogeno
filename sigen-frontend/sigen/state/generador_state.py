@@ -1,10 +1,20 @@
 # sigen/state/generador_state.py
+"""
+Estado global de SIGEGEN para Reflex.
+Maneja la obtención de datos desde el backend FastAPI,
+el estado de conexión a InfluxDB, filtros de UI y auto-refresco.
+"""
 import reflex as rx
 import httpx
 import json
+from datetime import datetime
 from typing import List, Dict, Any, Optional
 
 API_BASE_URL = "http://localhost:8001"
+
+# Timeout configurado para llamadas HTTP (en segundos)
+HTTP_TIMEOUT = httpx.Timeout(timeout=10.0, connect=5.0)
+
 
 def format_generator_data(g: Dict[str, Any]) -> Dict[str, Any]:
     """Helper to pre-format generator telemetry data into display-friendly values."""
@@ -176,7 +186,13 @@ class GeneradorState(rx.State):
     
     # Estado de UI
     loading: bool = False
+    loading_detail: bool = False
     error: str = ""
+    
+    # Estado de conexión InfluxDB
+    is_influx_connected: bool = False
+    datasource_mode: str = ""  # "influxdb", "sqlite_fallback", "no_datasource"
+    last_refresh: str = ""
     
     # Temporizador de auto-refresco (en segundos)
     refresh_counter: int = 0
@@ -200,6 +216,31 @@ class GeneradorState(rx.State):
     @rx.var
     def resumen_subtitulo_totales(self) -> str:
         return f"{self.resumen.get('encendidos', 0)} Activos / {self.resumen.get('apagados', 0)} Apagados"
+
+    @rx.var
+    def has_error(self) -> bool:
+        """Indica si hay un error activo para mostrar en la UI."""
+        return len(self.error) > 0
+
+    @rx.var
+    def influx_status_text(self) -> str:
+        """Texto descriptivo del estado de la fuente de datos."""
+        if self.datasource_mode == "influxdb":
+            return "InfluxDB Conectado"
+        elif self.datasource_mode == "sqlite_fallback":
+            return "SQLite (Fallback)"
+        elif self.datasource_mode == "no_datasource":
+            return "Sin conexión"
+        return "Verificando..."
+
+    @rx.var
+    def influx_status_color(self) -> str:
+        """Color del badge de conexión."""
+        if self.datasource_mode == "influxdb":
+            return "green"
+        elif self.datasource_mode == "sqlite_fallback":
+            return "yellow"
+        return "red"
 
     @rx.var
     def generadores_filtrados(self) -> List[Dict[str, Any]]:
@@ -237,13 +278,41 @@ class GeneradorState(rx.State):
     def set_filtro_estado(self, valor: str):
         self.filtro_estado = valor
 
+    async def check_health(self):
+        """Verifica el estado de salud del backend y la conexión a InfluxDB."""
+        try:
+            async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+                response = await client.get(f"{API_BASE_URL}/health")
+                if response.status_code == 200:
+                    data = response.json()
+                    self.is_influx_connected = data.get("influxdb") == "connected"
+                    self.datasource_mode = data.get("mode", "")
+                else:
+                    self.is_influx_connected = False
+                    self.datasource_mode = "no_datasource"
+        except httpx.ConnectError:
+            self.is_influx_connected = False
+            self.datasource_mode = "no_datasource"
+            self.error = "No se pudo conectar con el servidor backend. Verifique que esté corriendo en el puerto 8001."
+        except httpx.TimeoutException:
+            self.is_influx_connected = False
+            self.datasource_mode = "no_datasource"
+            self.error = "Timeout al conectar con el backend. El servidor tardó demasiado en responder."
+        except Exception as e:
+            self.is_influx_connected = False
+            self.datasource_mode = "no_datasource"
+
     async def cargar_resumen(self):
         """Obtiene las métricas de resumen global de la API."""
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
                 response = await client.get(f"{API_BASE_URL}/api/resumen")
                 if response.status_code == 200:
                     self.resumen = response.json()
+        except httpx.ConnectError:
+            self.error = "Error de conexión con la API al cargar resumen."
+        except httpx.TimeoutException:
+            self.error = "Timeout al cargar resumen del dashboard."
         except Exception as e:
             self.error = f"Error de conexión con la API: {str(e)}"
 
@@ -251,13 +320,17 @@ class GeneradorState(rx.State):
         """Obtiene la lista completa de generadores con su telemetría más reciente."""
         self.loading = True
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
                 response = await client.get(f"{API_BASE_URL}/api/generadores")
                 if response.status_code == 200:
                     self.generadores = [format_generator_data(g) for g in response.json()]
                     self.error = ""
                 else:
                     self.error = f"Error del servidor backend ({response.status_code})"
+        except httpx.ConnectError:
+            self.error = "No se pudo conectar con el servidor backend."
+        except httpx.TimeoutException:
+            self.error = "Timeout al cargar lista de generadores."
         except Exception as e:
             self.error = f"Error al cargar generadores: {str(e)}"
         finally:
@@ -266,25 +339,34 @@ class GeneradorState(rx.State):
     async def cargar_alertas(self):
         """Obtiene el historial de alertas recientes."""
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
                 response = await client.get(f"{API_BASE_URL}/api/alertas?limite=30")
                 if response.status_code == 200:
                     self.alertas = [format_generator_data(a) for a in response.json()]
+        except httpx.ConnectError:
+            print("Error de conexión al cargar alertas")
+        except httpx.TimeoutException:
+            print("Timeout al cargar alertas")
         except Exception as e:
             print(f"Error cargando alertas: {e}")
 
     async def cargar_todos_datos(self):
         """Carga en paralelo todos los datos de inicio."""
+        await self.check_health()
         await self.cargar_resumen()
         await self.cargar_generadores()
         await self.cargar_alertas()
+        # Actualizar timestamp de última carga
+        self.last_refresh = datetime.now().strftime("%H:%M:%S")
 
     async def periodic_refresh(self):
         """Función periódica gatillada por Reflex para auto-refrescar datos en vivo."""
         self.refresh_counter += 1
+        await self.check_health()
         await self.cargar_resumen()
         await self.cargar_generadores()
         await self.cargar_alertas()
+        self.last_refresh = datetime.now().strftime("%H:%M:%S")
         
         # Si hay un generador detallado actualmente seleccionado, refrescar sus datos también
         if self.selected_generador_id:
@@ -293,8 +375,9 @@ class GeneradorState(rx.State):
     async def cargar_detalle(self, generador_id: str):
         """Carga la telemetría detallada e histórica de un generador en particular."""
         self.selected_generador_id = generador_id
+        self.loading_detail = True
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
                 # 1. Obtener última lectura del nodo
                 response_ultimo = await client.get(f"{API_BASE_URL}/api/telemetria/{generador_id}/ultimo")
                 if response_ultimo.status_code == 200:
@@ -313,8 +396,14 @@ class GeneradorState(rx.State):
                                 h["hora"] = dt
                             except:
                                 h["hora"] = h["timestamp"]
+        except httpx.ConnectError:
+            self.error = "Error de conexión al cargar detalle del generador."
+        except httpx.TimeoutException:
+            self.error = "Timeout al cargar detalle del generador."
         except Exception as e:
             self.error = f"Error cargando detalle: {str(e)}"
+        finally:
+            self.loading_detail = False
 
     async def cargar_detalle_por_id(self):
         """Saca el ID del generador del parámetro de ruta e inicia la carga."""
@@ -328,3 +417,7 @@ class GeneradorState(rx.State):
     def ir_a_detalle(self, generador_id: str):
         """Navega a la vista de detalle de un generador específico."""
         return rx.redirect(f"/generador/{generador_id}")
+
+    def dismiss_error(self):
+        """Limpia el mensaje de error actual."""
+        self.error = ""

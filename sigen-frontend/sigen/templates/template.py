@@ -9,8 +9,33 @@ def top_header() -> rx.Component:
     return rx.hstack(
         # Búsqueda o título de contexto
         rx.hstack(
-            rx.icon(tag="database", size=18, color="#10B981"),
-            rx.text("Base de Datos: Conectada", size="2", font_weight="500", color="#10B981"),
+            rx.icon(
+                tag="database",
+                size=18,
+                color=rx.cond(
+                    GeneradorState.is_influx_connected,
+                    "#10B981",
+                    rx.cond(
+                        GeneradorState.datasource_mode == "sqlite_fallback",
+                        "#F59E0B",
+                        "#EF4444",
+                    ),
+                ),
+            ),
+            rx.text(
+                GeneradorState.influx_status_text,
+                size="2",
+                font_weight="500",
+                color=rx.cond(
+                    GeneradorState.is_influx_connected,
+                    "#10B981",
+                    rx.cond(
+                        GeneradorState.datasource_mode == "sqlite_fallback",
+                        "#F59E0B",
+                        "#EF4444",
+                    ),
+                ),
+            ),
             spacing="2",
             align="center"
         ),
