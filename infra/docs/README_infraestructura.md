@@ -197,4 +197,4 @@ netbird status
 | InfluxDB | `http://localhost:8086` · org `sigegen` · bucket `generadores` · token en `~/sigegen/token.txt` |
 | Scripts | `~/sigegen/scripts/` · venv `~/sigegen-venv/` |
 
-> ⚠️ Las contraseñas y tokens no van en este documento ni en el repo. La migración a `.env` / gestor de secretos está planificada para después de la parcial.
+> Las contraseñas y tokens no van en este documento ni en el repo. La migración a `.env` / gestor de secretos está planificada para después de la parcial.
