@@ -1,7 +1,6 @@
 # Documentación SIGEGEN — Refactorizada y consolidada
 
 > Tres documentos en uno: README (operativo), ARQUITECTURA (conceptual), WIKI (referencia).
-> Sin duplicación, sin roles, trabajo colaborativo.
 
 ---
 
@@ -246,7 +245,7 @@ Si Mosquitto vuelve a fallar al boot, lo primero a revisar es que este valor sig
 | Scripts | `~/sigegen/scripts/` |
 | Venv Python | `~/sigegen-venv/` |
 
-⚠️ **Credenciales:** Nunca en repositorio. Usar `.env` o gestor de secretos.
+**Credenciales:** Nunca en repositorio. Usar `.env` o gestor de secretos.
 
 ---
 
