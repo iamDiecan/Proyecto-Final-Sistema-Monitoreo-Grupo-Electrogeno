@@ -1,4 +1,4 @@
-# README — Infraestructura SIGEGEN (pista EIyS)
+# README — Infraestructura SIGEGEN 
 
 > Cómo levantar el stack de cero, operarlo día a día y qué hacer si algo se cae.
 > Para el "por qué" de cada decisión (MQTT vs HTTP, Mosquitto, InfluxDB, Netbird), ver el documento de arquitectura.
