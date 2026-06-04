@@ -26,7 +26,7 @@
 
 **SIGEGEN** es un sistema de monitoreo (y posiblemente control) de una flota de generadores heterogéneos distribuidos geográficamente en la provincia de Formosa, usando IoT.
 
-- **Entrega parcial**: 25 junio 2026
+- **Entrega parcial**: junio 2026
 - **Entrega final**: octubre 2026
 - **Institución**: Instituto Politécnico de Formosa
 
@@ -68,14 +68,14 @@ Administración: SSH del Lenovo a la VM por NAT + port forwarding (puerto 22) �
 ```
 Generadores en campo (distribuidos en Formosa)
         ↓ sensores físicos
-Nodo de campo (SBC o ESP32 — rol de HL, fuera de mi pista)
+Nodo de campo (SBC o ESP32)
         ↓ preprocesamiento local (*)
         ↓ MQTT sobre red segura (Netbird VPN mesh)
 Mosquitto (servidor central)
         ↓
 InfluxDB (servidor central)
         ↓
-App web propia (visualización y control — pista de SL)
+App web propia (visualización y control)
 Bot de Telegram (alertas + consultas interactivas)
 
 Capa de red:
@@ -105,8 +105,8 @@ Lo que me corresponde:
 - Documentación de infraestructura
 
 Lo que **no** me corresponde y no toco:
-- Nodos físicos, ESP32, sensores, firmware → pista de HL
-- App web, backend de visualización → pista de SL
+- Nodos físicos, ESP32, sensores, firmware 
+- App web, backend de visualización 
 
 ---
 
@@ -420,7 +420,7 @@ REPETIR_ALERTA     = False   # True = avisa cada vez que sigue en crítico
                              # False = avisa solo la primera vez, hasta que se normalice
 
 # ============================================================
-# UMBRALES — ajustar con el compañero de hardware (HL)
+# UMBRALES
 # ============================================================
 # Formato: { "nombre_field": ("condicion", valor_umbral, "descripcion legible") }
 # condicion puede ser "mayor" o "menor"
@@ -706,7 +706,7 @@ Foco: stack de infraestructura funcionando y demostrable.
 - [ ] Stress test: múltiples nodos concurrentes
 - [ ] Medir latencia end-to-end
 - [ ] Prueba de campo con nodo real (48 hs)
-- [ ] Integración final con el track de HL (ESP32)
+- [ ] Integración final con el track de hardware (ESP32)
 - [ ] Sesión de seguridad: migrar credenciales a `.env` / gestor, rotación de tokens (cronograma 18/06)
 - [ ] Documentación final: README, diagramas, manual
 
@@ -726,7 +726,7 @@ Foco: stack de infraestructura funcionando y demostrable.
 
 **Escritura por lotes (batch writes)** — En vez de escribir cada punto al instante, se acumulan varios (hasta `batch_size`) o se espera un tiempo (`flush_interval`) y se mandan juntos. Reduce el costo por escritura.
 
-**App web propia** — Interfaz visual de desarrollo propio que reemplaza a Grafana. Muestra el estado de los generadores en tiempo real. Desarrollo a cargo de SL, fuera de mi pista.
+**App web propia** — Interfaz visual de desarrollo propio que reemplaza a Grafana. Muestra el estado de los generadores en tiempo real. 
 
 **Netbird** — VPN mesh Zero Trust. Conecta nodos de forma segura sin servidor de paso central. Permite definir políticas de acceso por grupo y protocolo.
 
