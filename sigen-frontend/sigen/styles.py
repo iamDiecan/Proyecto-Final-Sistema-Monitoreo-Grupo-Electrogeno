@@ -1,45 +1,63 @@
 # sigen/styles.py
 import reflex as rx
 
-# Paleta de colores e identidades
-BG_COLOR = "#0A0D1A"         # Fondo principal de la app
-CARD_BG = "rgba(22, 28, 45, 0.7)" # Fondo de tarjeta (Glassmorphism)
-CARD_BORDER = "1px solid rgba(255, 255, 255, 0.08)"
-SIDEBAR_BG = "#0D1122"       # Fondo de la barra lateral
-ACCENT_COLOR = "#4F46E5"     # Indigo
-ACCENT_CYAN = "#06B6D4"      # Cyan
-TEXT_COLOR = "#E2E8F0"       # Gris claro para legibilidad
-MUTED_TEXT = "#94A3B8"       # Gris muted
+# ── Paleta de Colores SIGEGEN Ion ──
+BG_COLOR = "#070B1A"         # Nocturno de subestación
+CARD_BG = "#11162C"          # Azul voltaje bajo
+TEXT_COLOR = "#EFF3FF"       # Blanco bobinado
+MUTED_TEXT = "#8892B0"       # Gris ion
 
-# Estados de alerta
+# ── Acentos y Estados ──
+ACCENT_CYAN = "#00E5FF"      # Cian de arco eléctrico (Normalidad)
+ACCENT_COLOR = ACCENT_CYAN   # Alias para componentes que usen ACCENT_COLOR
+SIDEBAR_BG = "#0B0F19"       # Fondo para la barra lateral
+STATUS_SUCCESS = "#00FFAA"   # Verde neón generador
+STATUS_WARNING = "#FFB300"   # Ámbar chispa
+STATUS_CRITICAL = "#FF1A1A"  # Rojo SCADA puro
+
+# ── Parámetros Específicos ──
+PARAM_OIL = MUTED_TEXT       # Neutro para reducir ruido visual
+PARAM_TEMP = MUTED_TEXT      # Neutro
+PARAM_FUEL = MUTED_TEXT      # Neutro
+
+# Estados de alerta mapeados
 STATE_COLORS = {
-    "normal": "#10B981",       # Esmeralda
-    "precaucion": "#F59E0B",   # Ámbar
-    "alerta": "#F97316",       # Naranja
-    "falla": "#EF4444",        # Rojo
-    "emergencia": "#EF4444"    # Rojo
+    "normal": STATUS_SUCCESS,
+    "precaucion": STATUS_WARNING,
+    "alerta": STATUS_WARNING,
+    "falla": STATUS_CRITICAL,
+    "emergencia": STATUS_CRITICAL
 }
 
-STATE_BG = {
-    "normal": "rgba(16, 185, 129, 0.15)",
-    "precaucion": "rgba(245, 158, 11, 0.15)",
-    "alerta": "rgba(249, 115, 22, 0.15)",
-    "falla": "rgba(239, 68, 68, 0.15)",
-    "emergencia": "rgba(239, 68, 68, 0.15)"
-}
+# ── Glow Effects ──
+GLOW_CYAN = "0 0 15px rgba(0, 229, 255, 0.2)" # Resplandor atenuado
+GLOW_CRITICAL = "0 0 20px rgba(255, 26, 26, 0.6)"
+GLOW_FUEL = "0 0 15px rgba(136, 146, 176, 0.2)" # Neutro
 
-# Estilo global de tarjeta con blur
+CARD_BORDER = "1px solid rgba(136, 146, 176, 0.1)"
+
+# Estilo global de tarjeta
 glass_card_style = dict(
     background=CARD_BG,
     border=CARD_BORDER,
-    backdrop_filter="blur(12px)",
     border_radius="16px",
     padding="1.5rem",
     box_shadow="0 8px 32px 0 rgba(0, 0, 0, 0.3)",
+    transition="all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+    _hover={
+        "box_shadow": "0 8px 32px 0 rgba(0, 0, 0, 0.4)",
+        "border": f"1px solid {MUTED_TEXT}",
+        "transform": "translateY(-2px)"
+    }
 )
 
 # Estilos globales para la app
 global_style = {
+    "@keyframes scada-blink": {
+        "0%": {"opacity": "1"},
+        "50%": {"opacity": "0.3"},
+        "100%": {"opacity": "1"},
+    },
     "body": {
         "background_color": BG_COLOR,
         "color": TEXT_COLOR,

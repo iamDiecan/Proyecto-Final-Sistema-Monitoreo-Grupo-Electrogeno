@@ -9,8 +9,9 @@ import httpx
 import json
 from datetime import datetime
 from typing import List, Dict, Any, Optional
+from sigen.state.auth_state import AuthState
 
-API_BASE_URL = "http://localhost:8001"
+API_BASE_URL = "http://localhost:8002"
 
 # Timeout configurado para llamadas HTTP (en segundos)
 HTTP_TIMEOUT = httpx.Timeout(timeout=10.0, connect=5.0)
@@ -63,7 +64,8 @@ def format_generator_data(g: Dict[str, Any]) -> Dict[str, Any]:
     bat = g.get("bateria_v")
     g["bateria_friendly"] = f"{bat:.1f} V" if bat is not None else "0.0 V"
     
-    uptime = g.get("uptime_s", 0)
+    uptime = g.get("uptime_s")
+    uptime = uptime if uptime is not None else 0
     g["uptime_friendly"] = f"{int(uptime // 3600)} horas"
     
     rssi = g.get("rssi_dbm")
@@ -77,22 +79,55 @@ def format_generator_data(g: Dict[str, Any]) -> Dict[str, Any]:
     comb = g.get("combustible_pct")
     g["combustible_str"] = f"{comb:.0f}%" if comb is not None else "0%"
     
-    comb_l = g.get("combustible_l", 0.0)
+    comb_l = g.get("combustible_l")
+    comb_l = comb_l if comb_l is not None else 0.0
     g["combustible_capacidad_friendly"] = f"{comb:.0f}% ({comb_l:.1f} L)" if comb is not None else f"0% ({comb_l:.1f} L)"
     
-    consumo = g.get("consumo_lh", 0.0)
+    consumo = g.get("consumo_lh")
+    consumo = consumo if consumo is not None else 0.0
     g["consumo_friendly"] = f"{consumo:.1f} L/h"
     
     autonomia = comb_l / consumo if consumo > 0.0 else 0.0
     g["autonomia_friendly"] = f"{autonomia:.1f} hs"
     
     # 4. Alerta difusa fields
-    alerta_lvl = g.get("alerta_difusa_nivel", 0.0)
+    alerta_lvl = g.get("alerta_difusa_nivel")
+    alerta_lvl = alerta_lvl if alerta_lvl is not None else 0.0
     g["alerta_nivel_str"] = f"{alerta_lvl:.1f} / 100"
     g["alerta_difusa_nivel_friendly"] = f"{alerta_lvl:.1f}%"
     
     categoria = g.get("alerta_difusa_categoria", "normal")
-    g["alerta_difusa_categoria_friendly"] = f"Severidad: {categoria.upper()}"
+    if categoria is None: categoria = "normal"
+    g["alerta_difusa_categoria_friendly"] = str(g.get("alerta_difusa_categoria", "Desconocido")).capitalize()
+    
+    # Determinar color explícitamente en el backend
+    try:
+        nivel = int(float(str(g.get("alerta_difusa_nivel", 0))))
+        g["color_alerta"] = "red" if nivel > 75 else "orange"
+    except:
+        g["color_alerta"] = "gray"
+        
+    est = str(g.get("estado", "")).lower()
+    if est == "normal":
+        g["estado_color"] = "cyan"
+        g["led_color"] = "#00E5FF"
+        g["led_shadow"] = "0 0 8px rgba(0, 229, 255, 0.6)"
+        g["alert_color"] = "#10B981"
+    elif est == "precaucion":
+        g["estado_color"] = "yellow"
+        g["led_color"] = "#FFB300"
+        g["led_shadow"] = "0 0 8px rgba(255, 179, 0, 0.6)"
+        g["alert_color"] = "#F59E0B"
+    elif est == "alerta":
+        g["estado_color"] = "orange"
+        g["led_color"] = "#FF3366"
+        g["led_shadow"] = "0 0 12px rgba(255, 51, 102, 0.8)"
+        g["alert_color"] = "#EF4444"
+    else:
+        g["estado_color"] = "ruby"
+        g["led_color"] = "#FF3366"
+        g["led_shadow"] = "0 0 12px rgba(255, 51, 102, 0.8)"
+        g["alert_color"] = "#EF4444"
     
     # Contributions (decompress and handle)
     contrib = g.get("alerta_difusa_contribuciones", {})
@@ -163,7 +198,7 @@ class GeneradorState(rx.State):
     # Datos cargados de la API
     generadores: List[Dict[str, Any]] = []
     alertas: List[Dict[str, Any]] = []
-    resumen: Dict[str, Any] = {
+    resumen_global: Dict[str, Any] = {
         "total": 0,
         "encendidos": 0,
         "apagados": 0,
@@ -177,12 +212,20 @@ class GeneradorState(rx.State):
     # Detalle de generador seleccionado
     selected_generador: Dict[str, Any] = {}
     historial_telemetria: List[Dict[str, Any]] = []
+    historial_alertas_generador: List[Dict[str, Any]] = []
     selected_generador_id: str = ""
     
     # Filtros de UI
     filtro_busqueda: str = ""
-    filtro_zona: str = ""   # "", "capital", "norte", "sur"
-    filtro_estado: str = "" # "", "normal", "alerta", "falla"
+    filtro_zona: str = "Toda la Provincia"
+    filtro_estado: str = "Todos"
+    filtro_combustible: str = "Todos"
+    filtro_temperatura: str = "Todas"
+    
+    # Filtros de Alertas
+    filtro_alerta_nodo: str = ""
+    filtro_alerta_tipo: str = "Todas"
+    filtro_solo_alertas: bool = False
     
     # Estado de UI
     loading: bool = False
@@ -199,23 +242,62 @@ class GeneradorState(rx.State):
 
     @rx.var
     def total_generadores(self) -> str:
-        return str(self.resumen.get("total", 0))
+        return str(self.resumen_global.get("total", 0))
 
     @rx.var
     def alerta_promedio_str(self) -> str:
-        return f"{self.resumen.get('alerta_promedio', 0.0):.1f}%"
+        return f"{self.resumen_global.get('alerta_promedio', 0.0):.1f}%"
 
     @rx.var
     def falla_generadores(self) -> str:
-        return str(self.resumen.get("falla", 0))
+        return str(self.resumen_global.get("falla", 0))
+
+    @rx.var
+    def disponibilidad_pct(self) -> int:
+        total = self.resumen_global.get("total", 0)
+        encendidos = self.resumen_global.get("encendidos", 0)
+        if total > 0:
+            return int((encendidos / total) * 100)
+        return 0
 
     @rx.var
     def combustible_promedio_str(self) -> str:
-        return f"{self.resumen.get('combustible_promedio', 0.0):.1f}%"
+        return f"{self.resumen_global.get('combustible_promedio', 0.0):.1f}%"
+
+    @rx.var
+    def alertas_recientes(self) -> List[Dict[str, Any]]:
+        return self.alertas
+
+    @rx.var
+    def alertas_inicio(self) -> List[Dict[str, Any]]:
+        # Ordenar por gravedad: EMERGENCIA -> CRÍTICO -> ALERTA -> PRECAUCIÓN
+        orden = {"EMERGENCIA": 0, "CRÍTICO": 1, "CRITICO": 1, "ALERTA": 2, "PRECAUCIÓN": 3, "PRECAUCION": 3}
+        ordenadas = sorted(self.alertas, key=lambda x: orden.get(str(x.get("estado_upper", "NORMAL")), 99))
+        return ordenadas[:4]
+
+    @rx.var
+    def alertas_filtradas(self) -> List[Dict[str, Any]]:
+        resultado = self.alertas
+        if self.filtro_alerta_nodo:
+            busq = self.filtro_alerta_nodo.lower()
+            resultado = [a for a in resultado if busq in a.get("nodo_id", "").lower() or busq in a.get("nombre_completo", "").lower()]
+        
+        if self.filtro_alerta_tipo and self.filtro_alerta_tipo != "Todas":
+            tipo_busq = self.filtro_alerta_tipo.upper()
+            # Handle normalizations for matching
+            if tipo_busq == "CRÍTICO": tipo_busq = "CRITICO"
+            if tipo_busq == "PRECAUCIÓN": tipo_busq = "PRECAUCION"
+            
+            resultado = [
+                a for a in resultado 
+                if a.get("estado_upper", "").replace("Ó", "O") == tipo_busq
+            ]
+            
+        return resultado
 
     @rx.var
     def resumen_subtitulo_totales(self) -> str:
-        return f"{self.resumen.get('encendidos', 0)} Activos / {self.resumen.get('apagados', 0)} Apagados"
+        return f"{self.resumen_global.get('encendidos', 0)} Activos / {self.resumen_global.get('apagados', 0)} Apagados"
 
     @rx.var
     def has_error(self) -> bool:
@@ -244,29 +326,48 @@ class GeneradorState(rx.State):
 
     @rx.var
     def generadores_filtrados(self) -> List[Dict[str, Any]]:
-        """Aplica filtros en tiempo real sobre la lista de generadores."""
+        """Aplica filtros combinados en tiempo real."""
         resultado = []
         for g in self.generadores:
-            # Filtro por búsqueda de ubicación o ID
-            match_busqueda = True
+            # 1. Filtro por búsqueda
             if self.filtro_busqueda:
                 termino = self.filtro_busqueda.lower()
                 id_match = termino in g.get("nodo_id", "").lower()
                 loc_match = termino in g.get("ubicacion", "").lower()
-                match_busqueda = id_match or loc_match
+                if not (id_match or loc_match):
+                    continue
             
-            # Filtro por zona
-            match_zona = True
-            if self.filtro_zona:
-                match_zona = g.get("zona", "").lower() == self.filtro_zona.lower()
+            # 2. Filtro por zona
+            if self.filtro_zona and self.filtro_zona != "Toda la Provincia":
+                if g.get("zona", "").lower() != self.filtro_zona.lower():
+                    continue
                 
-            # Filtro por estado
-            match_estado = True
-            if self.filtro_estado:
-                match_estado = g.get("estado", "").lower() == self.filtro_estado.lower()
+            # 3. Filtro por estado
+            if self.filtro_estado and self.filtro_estado != "Todos":
+                if g.get("estado", "").lower() != self.filtro_estado.lower():
+                    continue
+
+            # 4. Filtro por combustible
+            if self.filtro_combustible == "Bajo (<20%)":
+                if g.get("combustible_pct", 100) >= 20:
+                    continue
+            elif self.filtro_combustible == "Crítico (<10%)":
+                if g.get("combustible_pct", 100) >= 10:
+                    continue
+                    
+            # 5. Filtro por temperatura
+            if self.filtro_temperatura == "Alta (>85°C)":
+                if g.get("temp_motor_c", 0) <= 85:
+                    continue
+            elif self.filtro_temperatura == "Crítica (>95°C)":
+                if g.get("temp_motor_c", 0) <= 95:
+                    continue
                 
-            if match_busqueda and match_zona and match_estado:
-                resultado.append(g)
+            # 6. Solo alertas (legacy switch)
+            if self.filtro_solo_alertas and g.get("estado", "normal") == "normal":
+                continue
+                
+            resultado.append(g)
         return resultado
 
     def set_filtro_busqueda(self, valor: str):
@@ -277,12 +378,37 @@ class GeneradorState(rx.State):
 
     def set_filtro_estado(self, valor: str):
         self.filtro_estado = valor
+        
+    def set_filtro_combustible(self, valor: str):
+        self.filtro_combustible = valor
+        
+    def set_filtro_temperatura(self, value: str):
+        self.filtro_temperatura = value
+
+    def set_filtro_alerta_nodo(self, value: str):
+        self.filtro_alerta_nodo = value
+        
+    def set_filtro_alerta_tipo(self, value: str):
+        self.filtro_alerta_tipo = value
+
+    def toggle_filtro_solo_alertas(self):
+        self.filtro_solo_alertas = not self.filtro_solo_alertas
 
     async def check_health(self):
         """Verifica el estado de salud del backend y la conexión a InfluxDB."""
+        auth_state = await self.get_state(AuthState)
+        token = auth_state.token
+        if not token:
+            self.is_influx_connected = False
+            self.datasource_mode = "no_datasource"
+            return
+            
         try:
             async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
-                response = await client.get(f"{API_BASE_URL}/health")
+                response = await client.get(
+                    f"{API_BASE_URL}/health",
+                    headers={"Authorization": f"Bearer {token}"}
+                )
                 if response.status_code == 200:
                     data = response.json()
                     self.is_influx_connected = data.get("influxdb") == "connected"
@@ -304,11 +430,18 @@ class GeneradorState(rx.State):
 
     async def cargar_resumen(self):
         """Obtiene las métricas de resumen global de la API."""
+        auth_state = await self.get_state(AuthState)
+        token = auth_state.token
+        if not token: return
+        
         try:
             async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
-                response = await client.get(f"{API_BASE_URL}/api/resumen")
+                response = await client.get(
+                    f"{API_BASE_URL}/api/resumen",
+                    headers={"Authorization": f"Bearer {token}"}
+                )
                 if response.status_code == 200:
-                    self.resumen = response.json()
+                    self.resumen_global = response.json()
         except httpx.ConnectError:
             self.error = "Error de conexión con la API al cargar resumen."
         except httpx.TimeoutException:
@@ -318,10 +451,18 @@ class GeneradorState(rx.State):
 
     async def cargar_generadores(self):
         """Obtiene la lista completa de generadores con su telemetría más reciente."""
+        auth_state = await self.get_state(AuthState)
+        token = auth_state.token
+        if not token:
+            return
+            
         self.loading = True
         try:
             async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
-                response = await client.get(f"{API_BASE_URL}/api/generadores")
+                response = await client.get(
+                    f"{API_BASE_URL}/api/generadores",
+                    headers={"Authorization": f"Bearer {token}"}
+                )
                 if response.status_code == 200:
                     self.generadores = [format_generator_data(g) for g in response.json()]
                     self.error = ""
@@ -338,9 +479,16 @@ class GeneradorState(rx.State):
 
     async def cargar_alertas(self):
         """Obtiene el historial de alertas recientes."""
+        auth_state = await self.get_state(AuthState)
+        token = auth_state.token
+        if not token: return
+        
         try:
             async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
-                response = await client.get(f"{API_BASE_URL}/api/alertas?limite=30")
+                response = await client.get(
+                    f"{API_BASE_URL}/api/alertas?limite=30",
+                    headers={"Authorization": f"Bearer {token}"}
+                )
                 if response.status_code == 200:
                     self.alertas = [format_generator_data(a) for a in response.json()]
         except httpx.ConnectError:
@@ -374,17 +522,37 @@ class GeneradorState(rx.State):
 
     async def cargar_detalle(self, generador_id: str):
         """Carga la telemetría detallada e histórica de un generador en particular."""
+        auth_state = await self.get_state(AuthState)
+        token = auth_state.token
+        if not token: return
+        
         self.selected_generador_id = generador_id
         self.loading_detail = True
         try:
             async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
                 # 1. Obtener última lectura del nodo
-                response_ultimo = await client.get(f"{API_BASE_URL}/api/telemetria/{generador_id}/ultimo")
+                response_ultimo = await client.get(
+                    f"{API_BASE_URL}/api/telemetria/{generador_id}/ultimo",
+                    headers={"Authorization": f"Bearer {token}"}
+                )
                 if response_ultimo.status_code == 200:
                     self.selected_generador = format_generator_data(response_ultimo.json())
+                    
+                # 1.5 Obtener Health Score real
+                response_health = await client.get(
+                    f"{API_BASE_URL}/api/health/{generador_id}",
+                    headers={"Authorization": f"Bearer {token}"}
+                )
+                if response_health.status_code == 200:
+                    self.selected_generador["health_score"] = response_health.json().get("score", 80.0)
+                else:
+                    self.selected_generador["health_score"] = 0.0
                 
                 # 2. Obtener historial para gráficos
-                response_historial = await client.get(f"{API_BASE_URL}/api/telemetria/{generador_id}/historial?limite=30")
+                response_historial = await client.get(
+                    f"{API_BASE_URL}/api/telemetria/{generador_id}/historial?limite=60",
+                    headers={"Authorization": f"Bearer {token}"}
+                )
                 if response_historial.status_code == 200:
                     self.historial_telemetria = [format_generator_data(h) for h in response_historial.json()]
                     # Limpiar timestamps para que se vean amigables en el gráfico
@@ -396,6 +564,17 @@ class GeneradorState(rx.State):
                                 h["hora"] = dt
                             except:
                                 h["hora"] = h["timestamp"]
+                                
+                # 3. Obtener historial de alertas de este generador
+                response_alertas = await client.get(
+                    f"{API_BASE_URL}/api/telemetria/{generador_id}/alertas?limite=20",
+                    headers={"Authorization": f"Bearer {token}"}
+                )
+                if response_alertas.status_code == 200:
+                    self.historial_alertas_generador = [format_generator_data(a) for a in response_alertas.json()]
+                else:
+                    self.historial_alertas_generador = []
+                    
         except httpx.ConnectError:
             self.error = "Error de conexión al cargar detalle del generador."
         except httpx.TimeoutException:

@@ -9,10 +9,14 @@ Incluye:
   - Filtros de zona, estado y búsqueda
 """
 import reflex as rx
+from sigen.components.cards import generator_card, metric_card
+from sigen.components.charts import telemetry_chart
+from sigen.components.alerts import alert_item
+from sigen.components.kpi_cards import kpi_card_mini
+from sigen.components.health_gauge import health_gauge
 from sigen.templates.template import template
-from sigen.components.cards import metric_card, generator_card
+from sigen.styles import TEXT_COLOR, MUTED_TEXT, ACCENT_COLOR, CARD_BG, CARD_BORDER, CARD_BG, CARD_BORDER, ACCENT_CYAN
 from sigen.state.generador_state import GeneradorState
-from sigen.styles import MUTED_TEXT, TEXT_COLOR, CARD_BG, CARD_BORDER, ACCENT_CYAN
 
 
 def error_banner() -> rx.Component:
@@ -21,7 +25,7 @@ def error_banner() -> rx.Component:
         GeneradorState.has_error,
         rx.box(
             rx.hstack(
-                rx.icon(tag="alert-triangle", size=18, color="#FCD34D"),
+                rx.icon(tag="triangle-alert", size=18, color="#FCD34D"),
                 rx.text(
                     GeneradorState.error,
                     size="2",
@@ -104,53 +108,6 @@ def last_refresh_badge() -> rx.Component:
     )
 
 
-def filter_bar() -> rx.Component:
-    """Sección de filtros y buscador de generadores."""
-    return rx.flex(
-        # Buscador por texto
-        rx.input(
-            placeholder="Buscar por ID o Ciudad...",
-            value=GeneradorState.filtro_busqueda,
-            on_change=GeneradorState.set_filtro_busqueda,
-            width="320px",
-            size="3",
-            radius="large",
-        ),
-        
-        rx.spacer(),
-        
-        rx.hstack(
-            # Selector de Zona
-            rx.select(
-                ["Todas", "Capital", "Norte", "Sur"],
-                placeholder="Filtrar por Zona",
-                value=GeneradorState.filtro_zona,
-                on_change=GeneradorState.set_filtro_zona,
-                size="3",
-            ),
-            
-            # Selector de Estado
-            rx.select(
-                ["Todos", "Normal", "Alerta", "Falla"],
-                placeholder="Filtrar por Estado",
-                value=GeneradorState.filtro_estado,
-                on_change=GeneradorState.set_filtro_estado,
-                size="3",
-            ),
-            spacing="3",
-            align="center"
-        ),
-        width="100%",
-        padding="1rem",
-        background="rgba(255, 255, 255, 0.02)",
-        border="1px solid rgba(255, 255, 255, 0.05)",
-        border_radius="12px",
-        margin_y="1.5rem",
-        align="center",
-        direction="row",
-    )
-
-
 def loading_overlay() -> rx.Component:
     """Spinner centrado de carga con mensaje."""
     return rx.center(
@@ -198,75 +155,199 @@ def dashboard_content() -> rx.Component:
         # ── Banner de error (condicional) ─────────────────
         error_banner(),
         
-        # ── Tarjetas de Resumen ───────────────────────────
+        # ── KPIs Superiores ───────────────────────────────────────
         rx.grid(
-            metric_card(
-                title="Generadores Totales",
-                value=GeneradorState.total_generadores,
-                icon_tag="activity",
-                icon_color="#4F46E5",
-                subtitle=GeneradorState.resumen_subtitulo_totales
-            ),
-            metric_card(
-                title="Alerta Promedio",
-                value=GeneradorState.alerta_promedio_str,
-                icon_tag="alert-triangle",
-                icon_color="#F59E0B",
-                subtitle="Nivel difuso global"
-            ),
-            metric_card(
-                title="Sistemas en Falla",
-                value=GeneradorState.falla_generadores,
-                icon_tag="shield-alert",
-                icon_color="#EF4444",
-                subtitle="Requieren atención prioritaria"
-            ),
-            metric_card(
-                title="Promedio Combustible",
-                value=GeneradorState.combustible_promedio_str,
-                icon_tag="droplet",
-                icon_color="#06B6D4",
-                subtitle="Nivel medio de tanques"
-            ),
-            columns="4",
+            kpi_card_mini("Generadores Activos", f"{GeneradorState.resumen_global['encendidos']} / {GeneradorState.resumen_global['total']}", "zap", "#10B981"),
+            kpi_card_mini("Alertas Críticas", f"{GeneradorState.resumen_global['falla']}", "triangle-alert", "#EF4444"),
+            kpi_card_mini("Score Promedio", "85", "activity", "#3B82F6"),
+            kpi_card_mini("Nodos Offline", "0", "wifi-off", "#64748B"),
+            columns=rx.breakpoints(initial="1", sm="2", md="2", lg="4"),
             spacing="4",
             width="100%",
-            margin_top="1.5rem"
+            margin_bottom="2rem"
         ),
-        
-        # ── Barra de Filtros ──────────────────────────────
-        filter_bar(),
-        
-        # ── Grid de Generadores (con spinner y empty state) ──
-        rx.cond(
-            GeneradorState.loading,
-            loading_overlay(),
-            rx.cond(
-                GeneradorState.generadores_filtrados.length() > 0,
-                rx.grid(
-                    rx.foreach(
-                        GeneradorState.generadores_filtrados,
-                        generator_card
-                    ),
-                    columns="3",
-                    spacing="4",
-                    width="100%"
+
+        # ── Dashboard Principal: 2 Columnas ───────────────────────
+        rx.grid(
+            # Columna Izquierda: Nodos y Filtros (Jerárquico)
+            rx.vstack(
+                rx.hstack(
+                    rx.heading("Red de Generadores", size="5", color=TEXT_COLOR),
+                    rx.spacer(),
+                    rx.badge(f"{GeneradorState.generadores_filtrados.length()} resultados", color_scheme="indigo"),
+                    width="100%",
+                    align="center",
                 ),
-                rx.center(
-                    rx.vstack(
-                        rx.icon(tag="search-code", size=48, color=MUTED_TEXT),
-                        rx.text(
-                            "No se encontraron generadores con los filtros seleccionados.",
-                            color=MUTED_TEXT,
-                            size="3",
+                # Panel de Filtros
+                rx.hstack(
+                    rx.input(
+                        placeholder="Buscar nodo, localidad...",
+                        value=GeneradorState.filtro_busqueda,
+                        on_change=GeneradorState.set_filtro_busqueda,
+                        width="300px",
+                    ),
+                    rx.popover.root(
+                        rx.popover.trigger(
+                            rx.button(
+                                rx.icon("filter", size=16),
+                                "Filtros Avanzados",
+                                variant="soft",
+                                color_scheme="blue",
+                            )
                         ),
-                        spacing="2",
-                        align="center",
+                        rx.popover.content(
+                            rx.vstack(
+                                rx.text("Zona", size="2", font_weight="bold"),
+                                rx.select(
+                                    ["Toda la Provincia", "Capital", "Norte", "Sur"],
+                                    value=GeneradorState.filtro_zona,
+                                    on_change=GeneradorState.set_filtro_zona,
+                                    width="100%"
+                                ),
+                                rx.text("Estado", size="2", font_weight="bold"),
+                                rx.select(
+                                    ["Todos", "Normal", "Precaucion", "Alerta", "Falla"],
+                                    value=GeneradorState.filtro_estado,
+                                    on_change=GeneradorState.set_filtro_estado,
+                                    width="100%"
+                                ),
+                                rx.text("Combustible", size="2", font_weight="bold"),
+                                rx.select(
+                                    ["Todos", "Bajo (<20%)", "Crítico (<10%)"],
+                                    value=GeneradorState.filtro_combustible,
+                                    on_change=GeneradorState.set_filtro_combustible,
+                                    width="100%"
+                                ),
+                                rx.text("Temperatura", size="2", font_weight="bold"),
+                                rx.select(
+                                    ["Todas", "Alta (>85°C)", "Crítica (>95°C)"],
+                                    value=GeneradorState.filtro_temperatura,
+                                    on_change=GeneradorState.set_filtro_temperatura,
+                                    width="100%"
+                                ),
+                                spacing="3",
+                                width="250px"
+                            ),
+                        )
                     ),
                     width="100%",
-                    padding="4rem 0"
-                )
+                    spacing="3",
+                    margin_bottom="1rem"
+                ),
+                
+                rx.cond(
+                    GeneradorState.loading,
+                    rx.box(loading_overlay(), width="100%"),
+                    rx.box(
+                        rx.cond(
+                            GeneradorState.generadores_filtrados.length() > 0,
+                            rx.box(
+                                rx.grid(
+                                    rx.foreach(
+                                        GeneradorState.generadores_filtrados,
+                                        generator_card
+                                    ),
+                                    columns=rx.breakpoints(initial="1", md="2"),
+                                    spacing="4",
+                                    width="100%",
+                                    padding_top="1rem",
+                                ),
+                                width="100%"
+                            ),
+                            rx.box(
+                                rx.center(
+                                    rx.vstack(
+                                        rx.icon(tag="circle-check", size=48, color="#10B981"),
+                                        rx.heading("Todo en orden", size="4", color=TEXT_COLOR),
+                                        rx.text("No hay generadores en alerta.", color=MUTED_TEXT),
+                                        align="center"
+                                    ),
+                                    width="100%",
+                                    height="300px",
+                                    background=CARD_BG,
+                                    border=CARD_BORDER,
+                                    border_radius="16px",
+                                ),
+                                width="100%"
+                            )
+                        ),
+                        width="100%"
+                    )
+                ),
+                width="100%",
             ),
+            
+            # Columna Derecha: Resumen de Salud y Alertas
+            rx.vstack(
+                # Panel de Salud Global (Health Gauge)
+                rx.box(
+                    rx.vstack(
+                        rx.heading("Salud Global de la Red", size="4", color=TEXT_COLOR),
+                        rx.text("Índice ponderado basado en telemetría de todos los nodos", size="1", color=MUTED_TEXT, margin_bottom="1rem"),
+                        rx.center(
+                            health_gauge(85.0, 200),
+                            width="100%",
+                            padding="1rem"
+                        ),
+                        align="start",
+                        width="100%"
+                    ),
+                    background=CARD_BG,
+                    border=CARD_BORDER,
+                    padding="1.5rem",
+                    border_radius="16px",
+                    width="100%",
+                    box_shadow="0 8px 32px 0 rgba(0, 0, 0, 0.3)",
+                ),
+                
+                # Panel de Alertas Recientes
+                rx.box(
+                    rx.vstack(
+                        rx.hstack(
+                            rx.heading("Alertas Recientes", size="4", color=TEXT_COLOR),
+                            rx.spacer(),
+                            rx.badge(
+                                GeneradorState.alertas_recientes.length(),
+                                color_scheme="red",
+                                variant="solid"
+                            ),
+                            width="100%",
+                        ),
+                        rx.divider(margin_y="0.5rem", color="rgba(255, 255, 255, 0.06)"),
+                        rx.cond(
+                            GeneradorState.alertas_recientes.length() > 0,
+                            rx.box(
+                                rx.vstack(
+                                    rx.foreach(
+                                        GeneradorState.alertas_recientes,
+                                        alert_item
+                                    ),
+                                    spacing="3",
+                                    width="100%",
+                                ),
+                                width="100%"
+                            ),
+                            rx.box(
+                                rx.text("No hay alertas recientes.", color=MUTED_TEXT, size="2"),
+                                width="100%"
+                            )
+                        ),
+                        width="100%",
+                        align="start"
+                    ),
+                    background=CARD_BG,
+                    border=CARD_BORDER,
+                    padding="1.5rem",
+                    border_radius="16px",
+                    width="100%",
+                    box_shadow="0 8px 32px 0 rgba(0, 0, 0, 0.3)",
+                    margin_top="1.5rem"
+                ),
+                width="100%",
+            ),
+            columns=rx.breakpoints(initial="1", md="2"),
+            spacing="6",
+            width="100%"
         ),
         
         width="100%",
