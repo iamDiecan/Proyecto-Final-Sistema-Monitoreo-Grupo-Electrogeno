@@ -1,14 +1,21 @@
 # sigen/templates/template.py
 import reflex as rx
-from sigen.components.sidebar import sidebar
+from sigen.components.sidebar import sidebar, SidebarState
 from sigen.styles import BG_COLOR, TEXT_COLOR, MUTED_TEXT, ACCENT_COLOR
 from sigen.state.generador_state import GeneradorState
 
 def top_header() -> rx.Component:
     """Barra superior con información en tiempo real y controles globales."""
     return rx.hstack(
-        # Búsqueda o título de contexto
+        # Búsqueda o título de contexto y menú hamburguesa
         rx.hstack(
+            # Botón hamburguesa (siempre visible)
+            rx.icon_button(
+                rx.icon(tag="menu", size=20),
+                on_click=SidebarState.toggle_sidebar,
+                variant="ghost",
+                color_scheme="indigo",
+            ),
             rx.icon(
                 tag="database",
                 size=18,
@@ -88,7 +95,6 @@ def template(page_content: rx.Component) -> rx.Component:
                 min_height="calc(100vh - 60px)"
             ),
             width="100%",
-            margin_left="260px",  # Espacio para el sidebar fijo
             spacing="0",
         ),
         background=BG_COLOR,

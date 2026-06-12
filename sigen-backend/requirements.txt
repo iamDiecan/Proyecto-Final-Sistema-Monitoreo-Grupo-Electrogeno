@@ -4,3 +4,16 @@ pydantic
 influxdb-client
 python-dotenv
 cachetools
+sqlmodel
+bcrypt
+pyjwt
+scikit-fuzzy
+numpy
+apscheduler
+paho-mqtt
+httpx
+python-telegram-bot
+matplotlib
+pandas
+openpyxl
+fpdf2

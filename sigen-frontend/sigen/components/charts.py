@@ -30,14 +30,7 @@ def telemetry_chart(data: List[Dict[str, Any]], data_key: str, stroke_color: str
                     stroke_dasharray="3 3",
                     stroke="rgba(255, 255, 255, 0.04)"
                 ),
-                rx.recharts.tooltip(
-                    content_style={
-                        "background": "#0D1122",
-                        "border": "1px solid rgba(255,255,255,0.08)",
-                        "borderRadius": "8px",
-                        "color": "#E2E8F0"
-                    }
-                ),
+                rx.recharts.tooltip(),
                 data=data,
                 margin={"top": 5, "right": 5, "left": -20, "bottom": 5},
             ),

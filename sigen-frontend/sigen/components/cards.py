@@ -7,27 +7,37 @@ import reflex as rx
 from sigen.state.generador_state import GeneradorState
 from sigen.styles import (
     CARD_BG, CARD_BORDER, MUTED_TEXT, TEXT_COLOR,
-    ACCENT_COLOR, ACCENT_CYAN, glass_card_style,
+    ACCENT_CYAN, glass_card_style, PARAM_FUEL, GLOW_FUEL, GLOW_CYAN
 )
 
 
-def status_badge(estado: rx.Var) -> rx.Component:
-    """Badge de estado con color dinámico."""
+def status_badge(estado_str: rx.Var, color_str: rx.Var = None) -> rx.Component:
+    """Badge de estado con color estático e ícono dinámico."""
     return rx.badge(
-        estado,
-        color_scheme=rx.cond(
-            estado == "normal",
-            "green",
-            rx.cond(
-                estado == "precaucion",
-                "yellow",
-                rx.cond(
-                    estado == "alerta",
-                    "orange",
-                    "red"
-                )
-            )
-        )
+        rx.match(
+            estado_str,
+            ("NORMAL", rx.icon(tag="check", size=14)),
+            ("FALLA", rx.icon(tag="x", size=14)),
+            ("EMERGENCIA", rx.icon(tag="octagon-alert", size=14)),
+            ("PRECAUCION", rx.icon(tag="triangle-alert", size=14)),
+            ("ALERTA", rx.icon(tag="triangle-alert", size=14)),
+            rx.icon(tag="info", size=14)
+        ),
+        estado_str,
+        color_scheme=color_str,
+        variant="soft",
+        display="flex",
+        align_items="center",
+        gap="1"
+    )
+
+def led_indicator(background_color: rx.Var, box_shadow: rx.Var) -> rx.Component:
+    return rx.box(
+        width="10px",
+        height="10px",
+        border_radius="50%",
+        background_color=background_color,
+        box_shadow=box_shadow
     )
 
 
@@ -60,18 +70,7 @@ def metric_card(
             spacing="2",
             align="start",
         ),
-        background=CARD_BG,
-        border=CARD_BORDER,
-        backdrop_filter="blur(12px)",
-        border_radius="16px",
-        padding="1.5rem",
-        box_shadow="0 8px 32px 0 rgba(0, 0, 0, 0.3)",
-        transition="all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-        _hover={
-            "transform": "translateY(-4px)",
-            "box_shadow": "0 12px 40px 0 rgba(0, 0, 0, 0.4)",
-            "border": f"1px solid {icon_color}40",
-        },
+        **glass_card_style,
         width="100%",
     )
 
@@ -82,29 +81,17 @@ def generator_card(gen: rx.Var) -> rx.Component:
         rx.vstack(
             # ── Cabecera ──────────────────────────────────
             rx.hstack(
-                rx.vstack(
-                    rx.heading(gen["nombre_completo"], size="3", color=TEXT_COLOR),
-                    rx.text(gen["zona_friendly"], size="1", color=MUTED_TEXT),
-                    align_items="start",
-                ),
-                rx.badge(
-                    gen["estado_upper"],
-                    color_scheme=rx.cond(
-                        gen["estado"] == "normal",
-                        "green",
-                        rx.cond(
-                            gen["estado"] == "precaucion",
-                            "yellow",
-                            rx.cond(
-                                gen["estado"] == "alerta",
-                                "orange",
-                                "red"
-                            )
-                        )
+                rx.hstack(
+                    led_indicator(gen["led_color"].to(str), gen["led_shadow"].to(str)),
+                    rx.vstack(
+                        rx.heading(gen["nombre_completo"], size="3", color=TEXT_COLOR),
+                        rx.text(gen["zona_friendly"], size="1", color=MUTED_TEXT),
+                        align_items="start",
                     ),
-                    size="2",
-                    variant="soft",
+                    align="center",
+                    spacing="2"
                 ),
+                status_badge(gen["estado_upper"].to(str), gen["estado_color"].to(str)),
                 justify="between",
                 width="100%",
             ),
@@ -139,7 +126,7 @@ def generator_card(gen: rx.Var) -> rx.Component:
             rx.vstack(
                 rx.hstack(
                     rx.hstack(
-                        rx.icon(tag="droplet", size=14, color=ACCENT_CYAN),
+                        rx.icon(tag="droplet", size=14, color=PARAM_FUEL),
                         rx.text("Combustible", size="1", color=MUTED_TEXT),
                         spacing="1",
                         align="center",
@@ -149,11 +136,12 @@ def generator_card(gen: rx.Var) -> rx.Component:
                     width="100%",
                 ),
                 rx.progress(
-                    value=gen["combustible_pct"],
+                    value=gen["combustible_pct"].to(int),
                     width="100%",
                     height="6px",
-                    # Color fijo - sin comparaciones
-                    color_scheme="green",
+                    # Color fijo - neutralizado para SCADA HMI
+                    color_scheme="gray",
+                    box_shadow=GLOW_FUEL
                 ),
                 width="100%",
                 spacing="1",
@@ -192,18 +180,6 @@ def generator_card(gen: rx.Var) -> rx.Component:
             spacing="3",
             align="start",
         ),
-        # ── Estilos glassmorphism ─────────────────────────
-        background=CARD_BG,
-        border=CARD_BORDER,
-        backdrop_filter="blur(12px)",
-        border_radius="16px",
-        padding="1.5rem",
-        box_shadow="0 8px 32px 0 rgba(0, 0, 0, 0.3)",
+        **glass_card_style,
         width="100%",
-        transition="all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-        _hover={
-            "transform": "translateY(-4px)",
-            "box_shadow": "0 16px 48px 0 rgba(0, 0, 0, 0.45)",
-            "border": "1px solid rgba(255, 255, 255, 0.15)",
-        },
     )
